@@ -1,0 +1,9 @@
+# One file that covers every service's runtime dependencies (the per-service files are subsets of this).
+fastapi==0.162.0
+uvicorn==0.54.0
+SQLAlchemy==2.1.6
+PyJWT==2.15.1
+prometheus_client==0.26.0
+pydantic==2.14.2
+httpx==0.28.1
+redis==8.1.0
