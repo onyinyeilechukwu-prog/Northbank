@@ -1,0 +1,146 @@
+name: northbank
+
+x-app: &app
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 10s
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  auth:
+    <<: *app
+    image: northbank-auth:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: auth}}
+    environment:
+      DATABASE_URL: sqlite:////data/auth.db
+    volumes: ["auth_data:/data"]
+
+  customers:
+    <<: *app
+    image: northbank-customers:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: customers}}
+    environment:
+      DATABASE_URL: sqlite:////data/customers.db
+      REDIS_URL: redis://redis:6379/0
+    volumes: ["customers_data:/data"]
+
+  accounts:
+    <<: *app
+    image: northbank-accounts:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: accounts}}
+    environment:
+      DATABASE_URL: sqlite:////data/accounts.db
+      CUSTOMERS_URL: http://customers:8000
+    volumes: ["accounts_data:/data"]
+
+  fraud:
+    <<: *app
+    image: northbank-fraud:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: fraud}}
+    environment:
+      DATABASE_URL: sqlite:////data/fraud.db
+    volumes: ["fraud_data:/data"]
+
+  transactions:
+    <<: *app
+    image: northbank-transactions:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: transactions}}
+    environment:
+      DATABASE_URL: sqlite:////data/transactions.db
+      REDIS_URL: redis://redis:6379/0
+      ACCOUNTS_URL: http://accounts:8000
+      FRAUD_URL: http://fraud:8000
+    volumes: ["transactions_data:/data"]
+
+  cards:
+    <<: *app
+    image: northbank-cards:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: cards}}
+    environment:
+      DATABASE_URL: sqlite:////data/cards.db
+      REDIS_URL: redis://redis:6379/0
+      ACCOUNTS_URL: http://accounts:8000
+    volumes: ["cards_data:/data"]
+
+  loans:
+    <<: *app
+    image: northbank-loans:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: loans}}
+    environment:
+      DATABASE_URL: sqlite:////data/loans.db
+      REDIS_URL: redis://redis:6379/0
+      ACCOUNTS_URL: http://accounts:8000
+    volumes: ["loans_data:/data"]
+
+  ledger:
+    <<: *app
+    image: northbank-ledger:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: ledger}}
+    environment:
+      DATABASE_URL: sqlite:////data/ledger.db
+      REDIS_URL: redis://redis:6379/0
+      ACCOUNTS_URL: http://accounts:8000
+    volumes: ["ledger_data:/data"]
+
+  notification:
+    <<: *app
+    image: northbank-notification:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: notification}}
+    environment:
+      DATABASE_URL: sqlite:////data/notification.db
+      REDIS_URL: redis://redis:6379/0
+    volumes: ["notification_data:/data"]
+
+  audit:
+    <<: *app
+    image: northbank-audit:local
+    build: {context: ., dockerfile: Docker/Dockerfile, args: {SERVICE: audit}}
+    environment:
+      DATABASE_URL: sqlite:////data/audit.db
+      REDIS_URL: redis://redis:6379/0
+    volumes: ["audit_data:/data"]
+
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      auth: {condition: service_healthy}
+      customers: {condition: service_healthy}
+      accounts: {condition: service_healthy}
+      transactions: {condition: service_healthy}
+      cards: {condition: service_healthy}
+      loans: {condition: service_healthy}
+      ledger: {condition: service_healthy}
+      notification: {condition: service_healthy}
+
+volumes:
+  auth_data:
+  customers_data:
+  accounts_data:
+  fraud_data:
+  transactions_data:
+  cards_data:
+  loans_data:
+  ledger_data:
+  notification_data:
+  audit_data:
