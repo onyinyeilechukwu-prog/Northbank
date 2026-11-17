@@ -1,0 +1,51 @@
+image:
+  namePrefix: northbank-
+  tag: local
+  pullPolicy: IfNotPresent
+
+secretName: northbank-secrets
+
+config:
+  REQUIRE_KYC: "false"
+
+persistence:
+  size: 1Gi
+  storageClass: ""
+
+redis:
+  image: redis:7-alpine
+  port: 6379
+
+gateway:
+  image: nginx:1.27-alpine
+  port: 80
+
+services:
+  auth: {}
+  customers:
+    redis: true
+  accounts:
+    env:
+      CUSTOMERS_URL: http://customers:8000
+  fraud: {}
+  transactions:
+    redis: true
+    env:
+      ACCOUNTS_URL: http://accounts:8000
+      FRAUD_URL: http://fraud:8000
+  cards:
+    redis: true
+    env:
+      ACCOUNTS_URL: http://accounts:8000
+  loans:
+    redis: true
+    env:
+      ACCOUNTS_URL: http://accounts:8000
+  ledger:
+    redis: true
+    env:
+      ACCOUNTS_URL: http://accounts:8000
+  notification:
+    redis: true
+  audit:
+    redis: true
