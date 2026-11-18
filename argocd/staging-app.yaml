@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: northbank-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/onyinyeilechukwu-prog/Northbank.git
+    targetRevision: master
+    path: helm/northbank-chart
+    helm:
+      valueFiles:
+        - values-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: northbank
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
