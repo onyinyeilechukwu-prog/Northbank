@@ -300,7 +300,7 @@ output "ecr_repository_urls" {
 ############################################
 
 locals {
-  github_repo = "onyinyeilechukwu-prog/Northbank"
+  github_repo = "onyinyeilechukwu-prog@272174174/Northbank@1456929709"
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
