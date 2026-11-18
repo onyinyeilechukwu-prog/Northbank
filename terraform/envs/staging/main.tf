@@ -7,7 +7,7 @@ locals {
   public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
   private_subnet_cidrs = ["10.0.11.0/24", "10.0.12.0/24"]
   kubernetes_version   = null # null means AWS picks its current standard version
-  node_instance_type   = "t3.medium"
+  node_instance_type   = "m7i-flex.large"
   node_count           = 2
   services = [
     "auth", "customers", "accounts", "transactions", "fraud",
@@ -156,7 +156,6 @@ resource "aws_iam_role_policy_attachment" "node" {
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
     "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
     "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-    "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
   ])
 
   role       = aws_iam_role.node.name
@@ -214,11 +213,48 @@ resource "aws_eks_node_group" "this" {
 # 5. Disk add-on (lets the cluster create real disks for the volumes)
 ############################################
 
+resource "aws_eks_addon" "pod_identity_agent" {
+  cluster_name = aws_eks_cluster.this.name
+  addon_name   = "eks-pod-identity-agent"
+
+  depends_on = [aws_eks_node_group.this]
+}
+
+data "aws_iam_policy_document" "ebs_csi_trust" {
+  statement {
+    actions = ["sts:AssumeRole", "sts:TagSession"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["pods.eks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ebs_csi" {
+  name               = "${local.name}-ebs-csi-role"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_trust.json
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  role       = aws_iam_role.ebs_csi.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
 resource "aws_eks_addon" "ebs_csi" {
   cluster_name = aws_eks_cluster.this.name
   addon_name   = "aws-ebs-csi-driver"
 
-  depends_on = [aws_eks_node_group.this]
+  pod_identity_association {
+    role_arn        = aws_iam_role.ebs_csi.arn
+    service_account = "ebs-csi-controller-sa"
+  }
+
+  depends_on = [
+    aws_eks_node_group.this,
+    aws_eks_addon.pod_identity_agent,
+    aws_iam_role_policy_attachment.ebs_csi,
+  ]
 }
 
 ############################################
@@ -257,4 +293,76 @@ output "cluster_endpoint" {
 output "ecr_repository_urls" {
   description = "Address of each image repository"
   value       = { for k, r in aws_ecr_repository.service : k => r.repository_url }
+}
+
+############################################
+# 7. Let GitHub Actions push images to ECR (OIDC, no stored keys)
+############################################
+
+locals {
+  github_repo = "onyinyeilechukwu-prog/Northbank"
+}
+
+resource "aws_iam_openid_connect_provider" "github" {
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
+}
+
+data "aws_iam_policy_document" "github_trust" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${local.github_repo}:ref:refs/heads/master"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_ci" {
+  name               = "${local.name}-github-ci"
+  assume_role_policy = data.aws_iam_policy_document.github_trust.json
+}
+
+data "aws_iam_policy_document" "github_ci_push" {
+  statement {
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:PutImage",
+    ]
+    resources = [for r in aws_ecr_repository.service : r.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "github_ci_push" {
+  name   = "push-images-to-ecr"
+  role   = aws_iam_role.github_ci.id
+  policy = data.aws_iam_policy_document.github_ci_push.json
+}
+
+output "github_ci_role_arn" {
+  description = "Role that the GitHub pipeline takes to push images"
+  value       = aws_iam_role.github_ci.arn
 }
