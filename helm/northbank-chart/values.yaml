@@ -19,6 +19,8 @@ redis:
 gateway:
   image: nginx:1.27-alpine
   port: 80
+  service:
+    type: ClusterIP
 
 services:
   auth: {}
@@ -49,3 +51,8 @@ services:
     redis: true
   audit:
     redis: true
+
+externalSecrets:
+  enabled: false
+  region: eu-west-1
+  awsSecretName: ""

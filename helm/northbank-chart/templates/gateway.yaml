@@ -69,7 +69,7 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/part-of: northbank
 spec:
-  type: ClusterIP
+  type: {{ .Values.gateway.service.type }}
   selector:
     app.kubernetes.io/name: gateway
     app.kubernetes.io/instance: {{ .Release.Name }}

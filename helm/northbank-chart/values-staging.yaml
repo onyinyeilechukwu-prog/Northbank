@@ -1,0 +1,14 @@
+image:
+  namePrefix: 946502819841.dkr.ecr.eu-west-1.amazonaws.com/northbank-staging-
+  tag: 9516023837b3a2f0d350814b302634a64f4536a7
+
+externalSecrets:
+  enabled: true
+  awsSecretName: northbank/staging/app
+
+persistence:
+  storageClass: gp3
+
+gateway:
+  service:
+    type: LoadBalancer
