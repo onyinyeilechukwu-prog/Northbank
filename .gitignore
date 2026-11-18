@@ -12,3 +12,8 @@ venv/
 .vscode/
 .pytest_cache/
 .run/
+
+# Terraform: local state and downloaded plugins
+.terraform/
+*.tfstate
+*.tfstate.*
